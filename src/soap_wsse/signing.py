@@ -94,13 +94,26 @@ class SignQueue(object):
             etree.SubElement(reference, self.DS_DIGEST_VALUE)
 
 
-def sign_envelope(envelope, key_file):
-    """Sign the given soap request with the given key"""
+def sign_envelope(envelope, key_file, add_to_queue=None):
+    """Sign the given soap request body with the given key. An optional add_to_queue callable can be
+    passed to add additional elements to the signing queue. This function gets passed the document
+    tree and should return a collection of Elements."""
     doc = etree.fromstring(envelope)
     body = get_body(doc)
 
     queue = SignQueue()
     queue.push_and_mark(body)
+
+    if add_to_queue:
+        if not hasattr(add_to_queue, '__call__'):
+            raise ValueError('`zadd_to_queue` kwarg must be a callable')
+
+        extra_sign_queue = add_to_queue(doc)
+        if not hasattr(extra_sign_queue, '__iter__'):
+            raise ValueError('`add_to_queue` must return an iterable value')
+
+        for el in extra_sign_queue:
+            queue.push_and_mark(el)
 
     security_node = ensure_security_header(doc, queue)
     security_token_node = create_binary_security_token(key_file)
